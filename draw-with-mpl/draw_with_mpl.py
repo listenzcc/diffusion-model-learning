@@ -158,8 +158,8 @@ fig.tight_layout()
 plt.show()
 
 # Draw the signal without its mu
-fig, axs = plt.subplots(3, 1, figsize=(6, 3))
-draw_signal_with_I_cov(signal, 0.1, axs[2], use_mu_flag=False)
+fig, ax = plt.subplots(1, 1, figsize=(6, 3))
+draw_signal_with_I_cov(signal, 1.0, ax, use_mu_flag=False)
 fig.tight_layout()
 plt.show()
 
