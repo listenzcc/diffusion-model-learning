@@ -20,6 +20,11 @@
   - [扩散过程的递归表示](#扩散过程的递归表示)
   - [从方差的角度理解扩散递归](#从方差的角度理解扩散递归)
   - [通过链式推导实现状态跨越](#通过链式推导实现状态跨越)
+- [扩散模型入门（五）](#扩散模型入门五)
+  - [信号生成及扩散参数](#信号生成及扩散参数)
+  - [扩散模型的训练过程](#扩散模型的训练过程)
+  - [附录：一次完整扩散过程的演示](#附录一次完整扩散过程的演示)
+  - [附录：扩散模型的训练过程](#附录扩散模型的训练过程)
 
 # 扩散模型入门（一）
 
@@ -415,3 +420,81 @@ $$
 因此，我们可以将扩散过程理解成这样一个动态过程，**它不断地、蚂蚁搬家式地将先验信号$X_0$的协方差矩阵“替换”为标准正态分布的协方差矩阵**。先验信号怎么来的？它是从协方差矩阵未知的高维正态分布采样得来的。就像下面这样
 
 ![Untitled](%E6%89%A9%E6%95%A3%E6%A8%A1%E5%9E%8B%E5%85%A5%E9%97%A8%EF%BC%88%E5%9B%9B%EF%BC%89%2007dff0c9daef416685b3c06b65248872/Untitled.png)
+
+
+# 扩散模型入门（五）
+
+本文在前文的基础上开始实践扩散模型，扩散模型的学习目标是一条给定的连续曲线，它指代一个 50 维的连续信号。
+
+[https://github.com/listenzcc/diffusion-model-learning](https://github.com/listenzcc/diffusion-model-learning)
+
+---
+
+## 信号生成及扩散参数
+
+模拟信号的生成过程如左图所示，它是若干个单一频率信号的加权求和，这些频率值和加权系数是随机的。而扩散过程的参数轨迹如右图所示，扩散次数为 100 次，扩散速度参数 $\beta_{max} = 0.1$
+
+$$
+\begin{cases}
+\beta_t = sigmoid(f(t)) * \beta_{max} \\
+sigmoid(x) = \frac{1}{1 + exp(-x)}
+\end{cases}
+$$
+
+其中，$f(t)$ 代表 $t$ 时刻的扩散参数，它满足线性关系
+
+$$
+f(t) = \frac{t-t_{min}}{t_{max} - t{min}} * (t_{max} - t_{min}) + t_{min}
+$$
+
+![Untitled](%E6%89%A9%E6%95%A3%E6%A8%A1%E5%9E%8B%E5%85%A5%E9%97%A8%EF%BC%88%E4%BA%94%EF%BC%89%20751471c5cfa04f02b96bf7f9dddda8eb/Untitled.png)
+
+![Untitled](%E6%89%A9%E6%95%A3%E6%A8%A1%E5%9E%8B%E5%85%A5%E9%97%A8%EF%BC%88%E4%BA%94%EF%BC%89%20751471c5cfa04f02b96bf7f9dddda8eb/Untitled%201.png)
+
+## 扩散模型的训练过程
+
+前文已经总结了扩散次数与原始信号之间的关系，从这个关系可以看到，不管当前处于哪个扩散阶段 $t$，我们都能根据下式将其拆分为信号与噪声的线性组合，线性组合的系数是根据 $\beta_t$ 序列唯一确定的
+
+$$
+\begin{cases}
+\bar{\alpha}_t := \Pi_{s=1}^t \alpha_s \\
+\alpha_t := 1 - \beta_t \\
+p(x_t | x_0) = 
+\mathcal{N}(x_t; \sqrt{\bar{\alpha}_t}x_0, (1 - \bar{\alpha}_t) I)
+\end{cases}
+$$
+
+从最实用的角度上讲，扩散模型的学习目标是**通过模型预测扩散终点，即噪声**。因此，其损失函数为
+
+$$
+\hat{N} = \lim_{t \rightarrow \infty} x_t = f_{\theta, x_0}(x_t, t)
+$$
+
+其中，$\theta$代表网络参数，$x_0$代表初始的有意义的高维信号，$x_t$代表扩散过程中观测到的信号，$N \sim \mathcal{N}(0, I)$ 代表最终噪声。易知，损失函数为
+
+$$
+\hat{\theta} = argmin_{\theta} \Vert \hat{N} - N \Vert
+$$
+
+当然，在训练过程中需要对扩散过程进行大量重复，从而增强模型的鲁棒性。模型训练效果如下，从噪声中还原信号是扩散的逆过程，还原过程用到了下式的逆过程
+
+$$
+p(x_t | x_{t-1}) = 
+\mathcal{N}(x_t; \sqrt{1 - \beta_t} x_{t-1}, \beta_t I)
+$$
+
+![Untitled](%E6%89%A9%E6%95%A3%E6%A8%A1%E5%9E%8B%E5%85%A5%E9%97%A8%EF%BC%88%E4%BA%94%EF%BC%89%20751471c5cfa04f02b96bf7f9dddda8eb/Untitled%202.png)
+
+## 附录：一次完整扩散过程的演示
+
+下图表示某次训练时构造的训练样本，它代表 $x_0 \rightarrow x_t$ 的多次扩散过程。
+
+![Untitled](%E6%89%A9%E6%95%A3%E6%A8%A1%E5%9E%8B%E5%85%A5%E9%97%A8%EF%BC%88%E4%BA%94%EF%BC%89%20751471c5cfa04f02b96bf7f9dddda8eb/Untitled%203.png)
+
+## 附录：扩散模型的训练过程
+
+下图表示训练过程中的损失函数变化，左图代表训练开始时的状态，右图代表训练进行到一半时的状态。
+
+![Untitled](%E6%89%A9%E6%95%A3%E6%A8%A1%E5%9E%8B%E5%85%A5%E9%97%A8%EF%BC%88%E4%BA%94%EF%BC%89%20751471c5cfa04f02b96bf7f9dddda8eb/Untitled%204.png)
+
+![Untitled](%E6%89%A9%E6%95%A3%E6%A8%A1%E5%9E%8B%E5%85%A5%E9%97%A8%EF%BC%88%E4%BA%94%EF%BC%89%20751471c5cfa04f02b96bf7f9dddda8eb/Untitled%205.png)
