@@ -332,7 +332,8 @@ BATCH_SIZE = 1000
 
 loss_trace = []
 
-for round in range(10):
+# for round in range(10):
+for round in range(3):
     for epoch in range(NUM_EPOCHS):
 
         steps = torch.randint(0, DIFFUSION_STEPS, (batch_size,))
@@ -414,5 +415,6 @@ ax.set_title('Dimension change by steps')
 fig.tight_layout()
 fig.savefig('final.png')
 plt.show()
+
 
 # %%

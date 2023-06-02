@@ -25,6 +25,14 @@
   - [扩散模型的训练过程](#扩散模型的训练过程)
   - [附录：一次完整扩散过程的演示](#附录一次完整扩散过程的演示)
   - [附录：扩散模型的训练过程](#附录扩散模型的训练过程)
+- [扩散模型入门（六）](#扩散模型入门六)
+  - [内容铺垫](#内容铺垫)
+  - [逆扩散过程](#逆扩散过程)
+  - [(x\_{t-1} - \\sqrt{\\bar{\\alpha}_{t-1}} \\cdot x\_0)^T (1-\\bar{\\alpha}_{t-1})^{-1} (x\_{t-1} - \\sqrt{\\bar{\\alpha}\_{t-1}} \\cdot x\_0)](#x_t-1---sqrtbaralphat-1-cdot-x_0t-1-baralphat-1-1-x_t-1---sqrtbaralpha_t-1-cdot-x_0)
+  - [扩散逆过程的数值求解](#扩散逆过程的数值求解)
+  - [附录：扩散逆过程的数值求解推导](#附录扩散逆过程的数值求解推导)
+  - [附录：一次项系数推导](#附录一次项系数推导)
+  - [附录：二次项系数推导](#附录二次项系数推导)
 
 # 扩散模型入门（一）
 
@@ -498,3 +506,220 @@ $$
 ![Untitled](%E6%89%A9%E6%95%A3%E6%A8%A1%E5%9E%8B%E5%85%A5%E9%97%A8%EF%BC%88%E4%BA%94%EF%BC%89%20751471c5cfa04f02b96bf7f9dddda8eb/Untitled%204.png)
 
 ![Untitled](%E6%89%A9%E6%95%A3%E6%A8%A1%E5%9E%8B%E5%85%A5%E9%97%A8%EF%BC%88%E4%BA%94%EF%BC%89%20751471c5cfa04f02b96bf7f9dddda8eb/Untitled%205.png)
+
+# 扩散模型入门（六）
+
+本文比较无聊，是对扩散逆过程的公式推导。
+
+---
+
+## 内容铺垫
+
+前方已经对扩散过程及其参数进行了规定，如下所示
+
+$$
+\begin{cases}
+p(x_t | x_{t-1}) = 
+\mathcal{N}(x_t; \sqrt{1 - \beta_t} x_{t-1}, \beta_t I)\\
+\lim_{t \rightarrow \infty} x_t \sim \mathcal{N}(x; 0, I) \\
+\beta_1 < \beta_2 < ... < \beta_t < \mathcal{C}
+\end{cases}
+$$
+
+$$
+\begin{cases}
+\bar{\alpha}_t := \Pi_{s=1}^t \alpha_s \\
+\alpha_t := 1 - \beta_t
+\end{cases}
+$$
+
+$$
+p(x_t | x_0) = 
+\mathcal{N}(x_t; \sqrt{\bar{\alpha}_t}x_0, (1 - \bar{\alpha}_t) I)
+$$
+
+在经过网络（参数计为$\theta$）计算后，我们可以通过 $t$ 次扩散的状态推知最终噪声
+
+$$
+\lim_{t \rightarrow \infty} x_t:=\epsilon_\theta = f_\theta(x_t, t), \epsilon_\theta \sim \mathcal{N}(0, I)
+$$
+
+## 逆扩散过程
+
+如果我们的目的是从$t$次扩散的结果反推其原因，即把扩散过程逆转过来，则等价于求解条件概率，如下式所示
+
+$$
+\begin{cases}
+p(x_{t-1} | x_t, x_0) &=
+p(x_t, x_{t-1}|x_0) \cdot \frac{1}{p(x_t | x_0)} \\
+p(x_t, x_{t-1}) &= p(x_t | x_{t-1}) \cdot p(x_{t-1}) \\
+p(x_t, x_{t-1}) &:= p(x_t, x_{t-1} | x_0)\\
+p(x_{t-1}) &:= p(x_{t-1} | x_0)
+\end{cases}
+$$
+
+因此有简化式
+
+$$
+p(x_{t-1} | x_t) = \frac{p(x_t | x_{t-1}) p(x_{t-1})}{p(x_t)}
+$$
+
+由于多维正态分布具有统一的形式，因此在求解上式时，我们可以只需考虑指数项之间的加法关系
+
+$$
+X \sim \mathcal{N}(\mu, \Sigma) \rightarrow p(x) = C \cdot exp(-(x - \mu)^T \Sigma (x - \mu)), \int p(x) dx = 1
+$$
+
+条件概率的指数项为
+
+$$
+(x_t - \sqrt{1 - \beta_t}\cdot x_{t-1})^T \beta_t^{-1} (x_t - \sqrt{1 - \beta_t}\cdot x_{t-1}) 
++
+(x_{t-1} - \sqrt{\bar{\alpha}_{t-1}} \cdot x_0)^T (1-\bar{\alpha}_{t-1})^{-1} (x_{t-1} - \sqrt{\bar{\alpha}_{t-1}} \cdot x_0)
+-
+(x_{t} - \sqrt{\bar{\alpha}_{t}} \cdot x_0)^T (1-\bar{\alpha}_{t})^{-1} (x_{t} - \sqrt{\bar{\alpha}_{t}} \cdot x_0)
+
+$$
+
+虽然这个式子较为复杂，但我们只关心 $x_{t-1}$的二次项和一次项系数
+
+$$
+\begin{cases}
+x_{t-1}^2 := \psi_2\\
+-2x_{t-1} := \psi_1
+\end{cases}
+$$
+
+易知，条件概率的指数项总可以表示为如下形式
+
+$$
+(x_{t-1} - \frac{\psi_1}{\psi_2} )^T \psi_2 (x_{t-1} - \frac{\psi_1}{\psi_2}) + \mathcal{C}
+$$
+
+其中，$\mathcal{C}$ 为待定常数。它代表条件概率密度函数为
+
+$$
+p(x_{t-1} | x_t, x_0) = \mathcal{N}(\frac{\psi_1}{\psi_2}, \psi_2^{-1}) := \mathcal{N}(\mu, \Sigma)
+$$
+
+经推导（过程见附录）得两项系数如下
+
+$$
+\begin{cases}
+\psi_1 = \beta_t^{-1} \sqrt{\alpha_t} \cdot x_t + (1 - \bar{\alpha}_{t-1})^{-1} \sqrt{\bar{\alpha}_{t-1}} \cdot x_0 \\
+\psi_2 = \frac{1 - \bar{\alpha}_t}{\beta_t(1-\bar{\alpha}_{t-1})}
+\end{cases}
+$$
+
+因此其协方差矩阵为
+
+$$
+
+\Sigma = I \cdot \frac{1-\bar{\alpha}_{t-1}}{1 - \bar{\alpha}_t} \beta_t
+
+$$
+
+其均值为
+
+$$
+\mu = 
+x_0 \cdot \frac{\beta_t\sqrt{\bar{\alpha}_{t-1}}}{1 - \bar{\alpha}_t} 
++
+x_t \cdot \frac{\sqrt{\alpha_t} (1-\bar{\alpha}_{t-1})}{1 - \bar{\alpha}_t}
+
+$$
+
+该均值即为$x_{t-1}$的估计。
+
+## 扩散逆过程的数值求解
+
+为了在求解过程中摆脱对$x_0$的依赖，将扩散过程数值化为下式
+
+$$
+x_t = \sqrt{\bar{\alpha}_t} x_0 + \sqrt{1 - \bar{\alpha}_t} \cdot \epsilon_\theta
+$$
+
+将 $x_0$ 代入 $\mu$ 式中，则有
+
+$$
+\mu = \frac{1}{\sqrt{\alpha}_t} ( x_t - \epsilon_\theta \cdot \frac{\beta_t}{\sqrt{1 - \bar{\alpha}_t}})
+$$
+
+## 附录：扩散逆过程的数值求解推导
+
+重写$x_0$为
+
+$$
+x_0 = \frac{1}{\sqrt{\bar{\alpha}_t}} x_t - \frac{\sqrt{1-\bar{\alpha}_t}}{\sqrt{\bar{\alpha}_t}} \epsilon_\theta
+$$
+
+代入原式有
+
+$$
+\mu = \frac{\beta_t\sqrt{\bar{\alpha}_{t-1}}}{1 - \bar{\alpha}_t} (\frac{1}{\sqrt{\bar{\alpha}_t}} x_t - \frac{\sqrt{1-\bar{\alpha}_t}}{\sqrt{\bar{\alpha}_t}} \epsilon_\theta) +
+x_t \cdot \frac{\sqrt{\alpha_t} (1-\bar{\alpha}_{t-1})}{1 - \bar{\alpha}_t}
+$$
+
+利用等式关系求得 $\epsilon_\theta$系数为
+
+$$
+\bar{\alpha}_t = \bar{\alpha}_{t-1} \cdot \alpha_t
+\rightarrow
+\mu = \epsilon_\theta \cdot \frac{\beta_t}{\sqrt{\alpha_t}\sqrt{1-\bar{\alpha}_t} } + f(x_t)
+$$
+
+而 $x_t$ 系数为
+
+$$
+f(x_t) = \frac{\beta_t\sqrt{\bar{\alpha}_{t-1}} + \alpha_t\sqrt{\bar{\alpha}_{t-1}}(1-\bar{\alpha}_{t-1})}{\sqrt{\bar{\alpha}_t}(1-\bar{\alpha}_t)}
+$$
+
+经整理得
+
+$$
+f(x_t) = \frac{\sqrt{\bar{\alpha}_{t-1}} (\beta_t + \alpha_t + \bar{\alpha}_t)}{\sqrt{\bar{\alpha}_t}(1-\bar{\alpha}_t)} = \frac{1}{\sqrt{\alpha_t}}
+$$
+
+最终有
+
+$$
+\mu = \frac{1}{\sqrt{\alpha}_t} ( x_t - \epsilon_\theta \cdot \frac{\beta_t}{\sqrt{1 - \bar{\alpha}_t}})
+$$
+
+## 附录：一次项系数推导
+
+与 $x_{t-1}$有关的多项式系数为
+
+$$
+-2 \beta_t^{-1} \sqrt{1 - \beta_t} \cdot x_t - 2 (1 - \bar{\alpha}_{t-1})^{-1} \sqrt{\bar{\alpha}_{t-1}} \cdot x_0
+$$
+
+易知
+
+$$
+\psi_1 = \beta_t^{-1} \sqrt{1 - \beta_t} \cdot x_t +(1 - \bar{\alpha}_{t-1})^{-1} \sqrt{\bar{\alpha}_{t-1}} \cdot x_0
+$$
+
+$$
+\psi_1 = \beta_t^{-1} \sqrt{\alpha_t} \cdot x_t + (1 - \bar{\alpha}_{t-1})^{-1} \sqrt{\bar{\alpha}_{t-1}} \cdot x_0
+$$
+
+其中用到了恒等关系$\alpha_t + \beta_t = 1$。
+
+## 附录：二次项系数推导
+
+易知
+
+$$
+\psi_2 = (1-\bar{\alpha}_{t-1})^{-1} + \beta_t^{-1}(1 - \beta_t)
+$$
+
+结过整理和化简得
+
+$$
+\psi_2 = \frac{1}{1-\bar{\alpha}_{t-1}} + \frac{\alpha_t}{\beta_t} \\
+\psi_2 = \frac{\beta_t + \alpha_t - \bar{\alpha}_t}{\beta_t(1-\bar{\alpha}_{t-1})} \\
+\psi_2 = \frac{1 - \bar{\alpha}_t}{\beta_t(1-\bar{\alpha}_{t-1})}
+$$
+
+其中用到了恒等关系$\alpha_t + \beta_t = 1$。
